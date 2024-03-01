@@ -3,7 +3,6 @@ import numpy as np
 from picamera.array import PiRGBArray
 from picamera import PiCamera
 import time
-import serial
 
 # Definir variáveis
 hmin, smin, vmin = 0, 0, 228
@@ -17,9 +16,6 @@ camera.resolution = (640, 480)
 camera.framerate = 32
 rawCapture = PiRGBArray(camera, size=(640, 480))
 time.sleep(0.1)  # Permitir que a câmera inicialize
-
-# Inicializar comunicação serial
-ser = serial.Serial('/dev/tty1', baudrate=115200, timeout=1)
 
 # Loop para processar cada frame da PiCamera
 for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
@@ -38,11 +34,13 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     
     # Localizar contornos na imagem
     contornos, hierarchy = cv2.findContours(máscara, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Inicializar variável para desenho na imagem
+    desenho = np.zeros_like(imagem)
 
     # Verificar se existem contornos na imagem
     if len(contornos) == 0:
-        # Enviar dados pela UART
-        ser.write("Nenhum raio foi detectado.\n".encode())
+        print("No frame", cont_frame, "nenhum raio foi detectado.")
         
     # Caso existam contornos, processá-los
     else:
@@ -61,9 +59,18 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
             cy = int(M["m01"] / M["m00"])
         else:
             cx, cy = 0, 0
+
+        # Desenhar o contorno e centróide na imagem
+        color = (0, 0, 255)
+        cv2.drawContours(desenho, contornos, maior_contorno, color, 1, 8, hierarchy, 0)
+        cv2.circle(desenho, (cx, cy), 4, color, -1, 8, 0)
         
-        # Enviar dados pela UART
-        ser.write(f"{aux_area}, {cx}, {cy}.\n".encode())
+        # Exibir informações sobre o maior contorno
+        if aux_area > 0:
+            print("No frame", cont_frame, "o maior raio possui uma área igual a", aux_area, ", com centróide localizado nas coordenadas", (cx, cy), ".")
+        else:
+            print("No frame", cont_frame, "nenhum raio foi detectado.")
+    
 
     # Limpar o buffer de captura para o próximo frame
     rawCapture.truncate(0)
@@ -77,5 +84,4 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
 
 # Finalizar a PiCamera
 camera.close()
-# Fechar comunicação serial
-ser.close()
+cv2.destroyAllWindows()
